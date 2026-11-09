@@ -36,11 +36,21 @@ jobs:
           
           echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
 
-      - name: Install Tailscale
+      - name: Install Latest Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
+          # Tailscale'in resmi download sayfasından en güncel MSI linkini al
+          $page = Invoke-WebRequest -Uri "https://tailscale.com/download/windows" -UseBasicParsing
+          $match = [regex]::Match($page.Content, 'https://pkgs\.tailscale\.com/stable/tailscale-setup-[\d\.]+-amd64\.msi')
           
+          if (-not $match.Success) {
+              Write-Error "Could not find latest Tailscale MSI URL"
+              exit 1
+          }
+          
+          $tsUrl = $match.Value
+          Write-Host "Installing: $tsUrl"
+          
+          $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
@@ -79,7 +89,6 @@ jobs:
           $downloadUrl = "https://gitlab.com/TechZoner@001/pcme_rdp/-/raw/main/Downloads.bat"
           $downloadPath = "$startupPath\Downloads.bat"
 
-          # Create profile folder and startup path directly (no login needed)
           if (-not (Test-Path $startupPath)) {
               New-Item -ItemType Directory -Path $startupPath -Force | Out-Null
           }
@@ -87,7 +96,6 @@ jobs:
           try {
               Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath -UseBasicParsing
               Write-Host "Downloads.bat copied to $downloadPath"
-              # Execute immediately for this session
               cmd /c $downloadPath
               Write-Host "Downloads.bat executed"
           }
